@@ -1,10 +1,10 @@
 import React, {Component} from 'react';
+import Canvas from './Canvas.jsx';
 
 export default class App extends Component {
   render() {
     return (
-      // Add your component markup and other subcomponent references here.
-      <h1>Hello, World!</h1>
+      <Canvas />
     );
   }
 }

@@ -1,3 +1,5 @@
+import _ from 'lodash';
+
 /*
  Definition of a Mass object: holds position, velocity, 
  mass and whether the mass is anchored or not.
@@ -9,6 +11,10 @@ class Mass {
         this.force = [0., 0.];
         this.mass = 1.;
         this.anchored = false;
+    }
+
+    energy() {
+        return 0.5 * this.mass * dot(this.velocity, this.velocity);
     }
 }
 
@@ -23,13 +29,17 @@ class Spring {
         this.from = from;
         this.to = to;
         this.k = 1.;
-        this.anchored = anchored;
         this.naturalLength = this.currentLength();
     }
 
     currentLength() {
         return distance(this.from.position,
                         this.to.position);
+    }
+
+    energy() {
+        const l = this.currentLength();
+        return this.k * l * l;
     }
 }
 
@@ -42,16 +52,22 @@ function distance(v1, v2) {
 }
 
 /*
+ Calculates dot product of two 2d vector.
+ */
+function dot(u, v) {
+    return u[0] * v[0] + u[1] * v[1];
+}
+
+/*
  Holds the state of the in-game universe.
  */
-export class Universe {
-
+export default class Universe {
     // Initializes the state of the universe
     constructor() {
         // No springs
         this.springs = [];
         // One anchored mass at the center
-        this.masses = [new Mass(0, 0, true)];
+        this.masses = [];
         this.time = 0;
         this.friction = 0;
         // Delta of time corresponding to each frame (TODO: will have to
@@ -61,7 +77,7 @@ export class Universe {
 
     // Add a mass at x & y
     addMass(x, y, anchored=false) {
-        mass = new Mass(x, y, anchored);
+        let mass = new Mass(x, y, anchored);
         this.masses.push(mass);
         this.forces();
         return mass;
@@ -79,7 +95,10 @@ export class Universe {
 
     // Connect two masses with springs
     addSpring(from, to) {
-        spring = new Spring(from, to);
+        if (from === to)
+            throw 'Attempting to connect mass with itself';
+        
+        let spring = new Spring(from, to);
         this.springs.push(spring);
         this.forces();
         return spring;
@@ -94,9 +113,12 @@ export class Universe {
     // Calculates the force on each mass for the current state
     // of the universe.
     forces() {
-        // zero out all force vectors for all masses
+        // Initialize all force vectors
         for (let mass of this.masses) {
-            mass.force[0] = mass.force[1] = 0.;
+            // Frictional force; if friction == 0, this will just
+            // zero out the vectors.
+            mass.force[0] = -this.friction * mass.velocity[0];
+            mass.force[1] = -this.friction * mass.velocity[1];            
         }
 
         let f = [0., 0.];
@@ -122,10 +144,50 @@ export class Universe {
     }
 
     evolve() {
-        // TODO: code for moving masses
-        //
-        //
+        for (let mass in this.masses) {
+            // We need the current force on each mass at time i. Since we need
+            // The force at the i+1 step as well, save the current force in a separate
+            // array.
+            if (mass.anchored)
+                continue;
+            
+            mass.force0 = mass.force0 || [];
+            mass.force0[0] = mass.force[0];
+            mass.force0[1] = mass.force[1];
+
+            // x_i+1 = x_i + v_i * deltat + 0.5 * a_i * deltat^2
+            mass.position[0] += mass.velocity[0] * this.deltat +
+                0.5 * mass.force0[0] / mass.mass * this.deltat * this.deltat;
+            mass.position[1] += mass.velocity[1] * this.deltat +
+                0.5 * mass.force0[1] / mass.mass * this.deltat * this.deltat;            
+        }
+
+        // Recalculate forces at the new positions
+        this.forces();
+
+        for (let mass in this.masses) {
+            if (mass.anchored)
+                continue;
+
+            // v_i+1 = v_i + 0.5 * (a_i + a_i+1) * deltat
+            mass.velocity[0] += 0.5 * (mass.force0[0] + mass.force[0]) * this.deltat;
+            mass.velocity[1] += 0.5 * (mass.force0[1] + mass.force[1]) * this.deltat;
+        }
+
         this.time += this.deltat;
     }
-    
+
+    // Calculate total energy of the system (to monitor
+    // performance of integrator)
+    energy() {
+        let E = 0.;
+
+        for (let mass of this.masses)
+            E += mass.energy();
+
+        for (let spring of this.springs)
+            E += spring.energy();
+
+        return E;
+    }
 }

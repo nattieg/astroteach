@@ -10,7 +10,7 @@ class Mass {
         this.velocity = [0, 0];
         this.force = [0., 0.];
         this.mass = 1.;
-        this.anchored = false;
+        this.anchored = anchored;
     }
 
     energy() {
@@ -28,7 +28,7 @@ class Spring {
     constructor(from, to) {
         this.from = from;
         this.to = to;
-        this.k = 1.;
+        this.k = 50.;
         this.naturalLength = this.currentLength();
     }
 
@@ -38,8 +38,8 @@ class Spring {
     }
 
     energy() {
-        const l = this.currentLength();
-        return this.k * l * l;
+        const l = this.currentLength() - this.naturalLength;
+        return 0.5 * this.k * l * l;
     }
 }
 
@@ -70,9 +70,9 @@ export default class Universe {
         this.masses = [];
         this.time = 0;
         this.friction = 0;
-        // Delta of time corresponding to each frame (TODO: will have to
-        // be changed depending on how fast the animation runs)
-        this.deltat = 0.01;
+        this.gravity = 0;
+        // Delta of time corresponding to each frame 
+        this.deltat = 0.005;
     }
 
     // Add a mass at x & y
@@ -118,7 +118,7 @@ export default class Universe {
             // Frictional force; if friction == 0, this will just
             // zero out the vectors.
             mass.force[0] = -this.friction * mass.velocity[0];
-            mass.force[1] = -this.friction * mass.velocity[1];            
+            mass.force[1] = -this.friction * mass.velocity[1] - this.gravity;            
         }
 
         let f = [0., 0.];
@@ -144,7 +144,7 @@ export default class Universe {
     }
 
     evolve() {
-        for (let mass in this.masses) {
+        for (let mass of this.masses) {
             // We need the current force on each mass at time i. Since we need
             // The force at the i+1 step as well, save the current force in a separate
             // array.
@@ -165,7 +165,7 @@ export default class Universe {
         // Recalculate forces at the new positions
         this.forces();
 
-        for (let mass in this.masses) {
+        for (let mass of this.masses) {
             if (mass.anchored)
                 continue;
 
@@ -180,14 +180,18 @@ export default class Universe {
     // Calculate total energy of the system (to monitor
     // performance of integrator)
     energy() {
-        let E = 0.;
-
-        for (let mass of this.masses)
-            E += mass.energy();
+        let K = 0.;
+        let U = 0.;
+        
+        for (let mass of this.masses) {
+            K += mass.energy();
+        }
 
         for (let spring of this.springs)
-            E += spring.energy();
+            U += spring.energy();
 
-        return E;
+        return {E: K + U, K, U};
     }
+
+    
 }

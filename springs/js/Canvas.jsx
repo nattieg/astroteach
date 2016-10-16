@@ -1,9 +1,10 @@
 import React from 'react';
-import Universe from './physics';
 import Raphael from 'raphael';
 import _ from 'lodash';
 import {RadioGroup, Radio} from 'react-radio-group';
 import $ from 'jquery';
+
+import Universe from './physics';
 
 const MASS_RADIUS = 15;
 
@@ -14,7 +15,6 @@ export default class Canvas extends React.Component {
             mode: 'add-mass',
             friction: 0.,
             gravity: false,
-            energy: { E: 0, K: 0, U: 0},
             zoom: 1,
             speed: 4
         };
@@ -63,6 +63,9 @@ export default class Canvas extends React.Component {
                         <Radio value="add-spring" />Connect w/ springs (drag from one mass to another)
                     </label>
                     <label>
+                        <Radio value="add-bar" />Connect w/ bar (drag from one mass to another)
+                    </label>
+                    <label>
                         <Radio value="drag-mass" />Drag masses
                     </label>
                     <label>
@@ -74,23 +77,11 @@ export default class Canvas extends React.Component {
                     <input type="text" value={ this.state.friction } onChange={ this.handleFriction }/>
                     Gravity:
                     <input type="checkbox" value={ this.state.gravity} onChange={ this.handleGravity }/>
-                <button onClick={ (e) => this.handleZoom(this.state.zoom * 1.5) }>Zoom in</button>
-                <button onClick={ (e) => this.handleZoom(this.state.zoom / 1.5) }>Zoom out</button>
-                <button onClick={ (e) => this.handleZoom(1) }>Original zoom</button>
-                <button onClick={ (e) => this.clear() }>Clear</button>
-                <button onClick={ (e) => this.randomize() }>Bungee</button>
-                </div>
-                <div>
-                    E:
-                    <span>{ this.state.energy.E.toFixed(2) }</span>
-                </div>
-                <div>
-                    K:
-                    <span>{ this.state.energy.K.toFixed(2) }</span>
-                </div>
-                <div>
-                    U:
-                    <span>{ this.state.energy.U.toFixed(2) }</span>                    
+                    <button onClick={ (e) => this.handleZoom(this.state.zoom * 1.5) }>Zoom in</button>
+                    <button onClick={ (e) => this.handleZoom(this.state.zoom / 1.5) }>Zoom out</button>
+                    <button onClick={ (e) => this.handleZoom(1) }>Original zoom</button>
+                    <button onClick={ (e) => this.clear() }>Clear</button>
+                    <button onClick={ (e) => this.randomize() }>Bungee</button>
                 </div>
             </div>
         );
@@ -102,7 +93,7 @@ export default class Canvas extends React.Component {
 
     // From physical coordinates to paper coordinates
     X(x) {
-       return x * this.state.zoom+Math.floor(this.paper.width/2); 
+        return x * this.state.zoom+Math.floor(this.paper.width/2); 
     }
 
     Y(y) {
@@ -129,7 +120,7 @@ export default class Canvas extends React.Component {
     }
 
     handleDragStart(X, Y, mass) {
-        if (this.state.mode == 'add-spring') {
+        if (this.state.mode == 'add-spring' || this.state.mode == 'add-bar') {
             mass.el.attr({ fill: 'lime' });
         } else if (this.state.mode == 'drag-mass') {
             mass._dragOrigin = [mass.position[0],
@@ -138,7 +129,7 @@ export default class Canvas extends React.Component {
     }
 
     handleDragMove(dX, dY, mass) {
-        if (this.state.mode == 'add-spring') {
+        if (this.state.mode == 'add-spring' || this.state.mode == 'add-bar') {
             if (! this._dragLine) {                
                 this._dragLine = this.paper.path();
             }
@@ -173,7 +164,7 @@ export default class Canvas extends React.Component {
     }
 
     handleDragEnd(X, Y, mass) {
-        if (this.state.mode == 'add-spring') {
+        if (this.state.mode == 'add-spring' || this.state.mode == 'add-bar') {
             if (this._dragLine)
                 this._dragLine.remove();
             this._dragLine = null;
@@ -215,6 +206,7 @@ export default class Canvas extends React.Component {
                         .path(`M${X1},${Y1} L${X2},${Y2}`)
                         .attr({ stroke: 'yellow', ['stroke-width']: 3 });
         spring.el.parent = spring;
+        spring.rigid = this.state.mode === 'add-bar';
     }
     
     addMass(X, Y, anchored=false) {
@@ -243,7 +235,7 @@ export default class Canvas extends React.Component {
         mass.el.remove();
         for (let spring of this.universe.springs)
             if (spring.from === mass || spring.to === mass)
-               spring.el.remove();
+            spring.el.remove();
     }
     
     // Set up canvas
@@ -282,7 +274,6 @@ export default class Canvas extends React.Component {
         }
 
         this.bg.toBack();
-        this.setState({ energy: this.universe.energy() });
     }
 
     zeroVelocity() {
@@ -296,7 +287,6 @@ export default class Canvas extends React.Component {
         for (let i = 0; i < 20; i++) {
             const theta = (i+1) * Math.PI/5;
             const r = a * theta;
-            console.log(theta, r);
             let X = Math.cos(theta) * r + this.paper.width/2;
             let Y = Math.sin(theta) * r + this.paper.height/2;
             

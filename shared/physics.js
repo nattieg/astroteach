@@ -18,23 +18,29 @@ class Mass {
     }
 }
 
-/*
- Definition of a Spring object: holds a pointer to
- the two masses it connects, its spring constant,
- and its natural length (calculated as the distance
- between the two masses when the spring is constructed).
- */
-class Spring {
+class Connection {
     constructor(from, to) {
         this.from = from;
         this.to = to;
-        this.k = 50.;
         this.naturalLength = this.currentLength();
     }
 
     currentLength() {
         return distance(this.from.position,
                         this.to.position);
+    }
+}
+
+/*
+ Definition of a Spring object: holds a pointer to
+ the two masses it connects, its spring constant,
+ and its natural length (calculated as the distance
+ between the two masses when the spring is constructed).
+ */
+class Spring extends Connection {
+    constructor(from, to) {
+        super(from, to);
+        this.k = 50.;
     }
 
     energy() {
@@ -45,12 +51,14 @@ class Spring {
 
 class PendulumArm {
     constructor(from, to) {
+        super(from, to);
         if (!from.anchored)
             throw new Error('The mass should be anchored.');
-        
-        this.from = from;
-        this.to = to;
-        this.naturaLength = this.currentLength();
+    }
+
+    energy() {
+        // TODO: Implement
+        return 0;
     }
 }
 
@@ -92,10 +100,7 @@ function normalize(v) {
 export default class Universe {
     // Initializes the state of the universe
     constructor() {
-        // No springs
-        this.springs = [];
-        this.pendulums = [];
-
+        this.connections = [];
         this.masses = [];
         this.time = 0;
         this.friction = 0;
@@ -117,8 +122,8 @@ export default class Universe {
         this.masses = _.without(this.masses, mass);
         // If the mass is involved in a spring, remove the
         // spring as well
-        this.springs = _.filter(this.springs,
-                                (spring) => spring.from === mass || spring.to === mass);
+        this.connections = _.filter(this.connections,
+                                    (con) => con.from === mass || con.to === mass);
         this.forces();
     }
 
@@ -128,14 +133,14 @@ export default class Universe {
             throw new Error('Attempting to connect mass with itself');
         
         let spring = new Spring(from, to);
-        this.springs.push(spring);
+        this.connections.push(spring);
         this.forces();
         return spring;
     }
 
     // Remove the spring
-    removeSpring(spring) {
-        this.springs = _.without(this.springs, spring);
+    removeConnection(con) {
+        this.connections = _.without(this.connections, con);
         this.forces();
     }
 
@@ -176,32 +181,35 @@ export default class Universe {
         let f = [0., 0.];
         let r = [0., 0.];
         // loop over all springs
-        for (let spring of this.springs) {
-            const d = spring.currentLength();
-            const nl = spring.naturalLength;
-
-            // Hooke's law: F = -k (x-x0) along the line connecting the masses
-            const F = spring.k * (d - nl);
-
-            // project over the unit vectors
-            f[0] = - F * (spring.from.position[0] - spring.to.position[0]) / d;
-            f[1] = - F * (spring.from.position[1] - spring.to.position[1]) / d;
-
-            // add force to each mass's force vectors
-            spring.from.force[0] += f[0];
-            spring.from.force[1] += f[1];
-            spring.to.force[0] -= f[0];
-            spring.to.force[1] -= f[1];
-        }
-
-        for (let pendulum of this.pendulums) {
-            const dx = pendulum.to.position[0] - pendulum.from.position[0];
-            const dy = pendulum.to.position[1] - pendulum.from.position[1];
-            const theta = Math.atan2(dy, dx);
-            const mg = pendulum.to.mass * this.gravity;
+        for (let con of this.connections) {
+            if (con instanceof Spring) {
             
-            pendulum.to.force[0] += mg * Math.sin(theta) * Math.cos(theta);
-            pendulum.to.force[1] += mg * Math.cos(theta) * Math.cos(theta);
+                const spring = con;
+                const d = spring.currentLength();
+                const nl = spring.naturalLength;
+
+                // Hooke's law: F = -k (x-x0) along the line connecting the masses
+                const F = spring.k * (d - nl);
+
+                // project over the unit vectors
+                f[0] = - F * (spring.from.position[0] - spring.to.position[0]) / d;
+                f[1] = - F * (spring.from.position[1] - spring.to.position[1]) / d;
+
+                // add force to each mass's force vectors
+                spring.from.force[0] += f[0];
+                spring.from.force[1] += f[1];
+                spring.to.force[0] -= f[0];
+                spring.to.force[1] -= f[1];
+            } else if (con instanceof PendulumArm) {
+                const pendulum = con;
+                const dx = pendulum.to.position[0] - pendulum.from.position[0];
+                const dy = pendulum.to.position[1] - pendulum.from.position[1];
+                const theta = Math.atan2(dy, dx);
+                const mg = pendulum.to.mass * this.gravity;
+                
+                pendulum.to.force[0] += mg * Math.sin(theta) * Math.cos(theta);
+                pendulum.to.force[1] += mg * Math.cos(theta) * Math.cos(theta);    
+            }
         }
     }
 
@@ -249,8 +257,8 @@ export default class Universe {
             K += mass.energy();
         }
 
-        for (let spring of this.springs)
-            U += spring.energy();
+        for (let con of this.connections)
+            U += con.energy();
 
         return {E: K + U, K, U};
     }
